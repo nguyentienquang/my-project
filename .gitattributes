@@ -1,0 +1,4 @@
+/.gradle/** filter=lfs diff=lfs merge=lfs -text
+/build/** filter=lfs diff=lfs merge=lfs -text
+/app/build/** filter=lfs diff=lfs merge=lfs -text
+/rust_core/target/** filter=lfs diff=lfs merge=lfs -text
