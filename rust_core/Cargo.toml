@@ -1,0 +1,35 @@
+[package]
+name = "watchcam_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "watchcam_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jni = { version = "0.21", default-features = false }
+tokio = { version = "1.38", features = ["rt-multi-thread", "sync", "macros", "time", "net", "io-util"] }
+axum = { version = "0.7", features = ["ws"] }
+axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rusqlite = { version = "0.31", features = ["bundled"] }
+rand = "0.8"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
+bytes = "1.6"
+futures = "0.3"
+parking_lot = "0.12"
+async-stream = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

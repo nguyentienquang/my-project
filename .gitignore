@@ -1,0 +1,26 @@
+# Android / Gradle build output and local configuration
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+*.apk
+*.aab
+
+# Rust build output and machine-specific Cargo configuration
+**/target/
+.cargo/
+
+# Local screenshots captured during development
+/saved_click.png
+/screen.png
+/screen2.png
+/tablet_*.png
+
+# Local secrets and signing material
+.env
+.env.*
+!.env.example
+key.properties
+*.jks
+*.keystore

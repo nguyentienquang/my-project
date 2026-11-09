@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>WatchCam — Bảng Giám Sát An Ninh</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-title">
+        <h1>WatchCam</h1>
+        <span class="brand-subtitle">Hệ Thống Giám Sát Tự Lưu Trữ</span>
+      </div>
+    </div>
+    <div class="header-status">
+      <div id="connBadge" class="status-badge offline">
+        <span class="dot"></span>
+        <span id="connStatusText">Mất kết nối</span>
+      </div>
+      <div id="viewerBadge" class="status-badge info">
+        <span id="viewerCount">0 người xem</span>
+      </div>
+      <button id="authBtn" class="btn btn-outline" style="display: none;">Ghép nối</button>
+      <button id="logoutBtn" class="btn btn-outline">Đăng xuất</button>
+    </div>
+  </header>
+
+  <main class="dashboard-grid">
+    <!-- Cột bên trái: Khung hình video trực tiếp -->
+    <section class="video-section">
+      <div class="video-container" id="videoContainer">
+        <div class="stream-overlay-top">
+          <span class="live-tag"><span class="pulse-dot"></span> TRỰC TIẾP</span>
+          <span id="streamFpsTag" class="fps-tag">0.0 FPS</span>
+          <span id="cameraNameTag" class="camera-tag">Camera Sau</span>
+          <button id="exitFullscreenTopBtn" class="btn-icon exit-fullscreen-top-btn" title="Thoát toàn màn hình" style="display: none;">Thoát</button>
+        </div>
+
+        <img id="streamView" class="stream-image" src="/stream.mjpeg" alt="Luồng video giám sát" />
+        <div id="detectionOverlay" class="detection-overlay" style="display: none;"></div>
+
+        <div id="streamPlaceholder" class="stream-placeholder">
+          <div class="placeholder-content">
+            <h3 id="placeholderTitle">Đang kết nối luồng camera...</h3>
+            <p id="placeholderDesc">Vui lòng chờ hoặc kiểm tra xem máy tính bảng đã bật giám sát chưa.</p>
+            <button id="retryStreamBtn" class="btn btn-primary">Thử kết nối lại</button>
+          </div>
+        </div>
+
+        <div class="stream-overlay-bottom">
+          <div class="controls-left">
+            <button id="toggleStreamBtn" class="btn-icon" title="Tạm dừng/Tiếp tục luồng">Tạm dừng</button>
+            <button id="rotateStreamBtn" class="btn-icon" title="Xoay video (0°, 90°, 180°, 270°)">Xoay <span id="rotDegTag" style="font-size:10px;font-weight:bold;">0°</span></button>
+            <button id="soundAlertBtn" class="btn-icon" title="Bật/Tắt chuông báo">Chuông</button>
+            <button id="btnToggleAudio" class="btn-icon" title="Bật/Tắt âm thanh trực tiếp">Bật tiếng</button>
+            <div class="volume-slider-wrapper" title="Âm lượng">
+              <input type="range" id="sliderAudioVolume" min="0" max="100" value="80" class="audio-volume-slider" />
+            </div>
+            <button id="quickSnapshotBtn" class="btn-icon" title="Chụp ảnh ngay">Chụp ảnh</button>
+          </div>
+          <div class="controls-right">
+            <button id="fullscreenBtn" class="btn-icon" title="Toàn màn hình">Toàn màn hình</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thẻ Âm Thanh Trực Tiếp & Đàm Thoại 2 Chiều -->
+      <div class="card audio-intercom-card">
+        <div class="audio-intercom-grid">
+          <div class="audio-listen-group">
+            <div class="audio-listen-header">
+              <span class="audio-title">Âm Thanh Trực Tiếp</span>
+              <span id="audioStatusBadge" class="badge-status muted">Đã tắt tiếng</span>
+            </div>
+            <div class="audio-meter-container">
+              <span class="meter-label">Cường độ âm thanh:</span>
+              <div class="meter-bar-bg">
+                <div id="audioMeterFill" class="meter-bar-fill" style="width: 0%;"></div>
+              </div>
+              <span id="audioMeterValue" class="meter-val">0%</span>
+            </div>
+          </div>
+          <div class="audio-talk-group">
+            <button id="btnPushToTalk" class="btn-push-to-talk" title="Nhấn và giữ nút để nói chuyện qua loa máy tính bảng">
+              <span id="pttText" class="ptt-text">Giữ để nói (Đàm thoại 2 chiều)</span>
+            </button>
+            <div id="pttStatus" class="ptt-status-hint">Nhấn và giữ nút để truyền giọng nói đến máy tính bảng</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thanh điều khiển nhanh -->
+      <div class="card control-bar">
+        <div class="control-group">
+          <label>Trạng thái giám sát:</label>
+          <div class="action-buttons">
+            <button id="startCamBtn" class="btn btn-success">Bắt đầu</button>
+            <button id="stopCamBtn" class="btn btn-danger">Dừng</button>
+            <button id="switchCamBtn" class="btn btn-secondary">Đổi Camera</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Xoay khung hình xem:</label>
+          <div class="rotation-btn-group">
+            <button class="btn btn-sm btn-outline rot-btn active" data-deg="0">0°</button>
+            <button class="btn btn-sm btn-outline rot-btn" data-deg="90">90°</button>
+            <button class="btn btn-sm btn-outline rot-btn" data-deg="180">180°</button>
+            <button class="btn btn-sm btn-outline rot-btn" data-deg="270">270°</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <label for="streamResolutionSelect">Độ phân giải:</label>
+          <select id="streamResolutionSelect" class="form-select">
+            <option value="480p" selected>VGA 480p (640×480 - Mượt 20+ FPS)</option>
+            <option value="720p">HD 720p (1280×720 - Sắc nét)</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="streamQualitySelect">Chất lượng ảnh JPEG:</label>
+          <select id="streamQualitySelect" class="form-select">
+            <option value="50">Tiết kiệm băng thông (50%)</option>
+            <option value="75">Tiêu chuẩn (75%)</option>
+            <option value="85" selected>Chất lượng cao (85%)</option>
+            <option value="95">Siêu nét / Không vỡ hình (95%)</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="cooldownSelect">Thời gian nghỉ báo động (Cooldown):</label>
+          <select id="cooldownSelect" class="form-select">
+            <option value="2">2 giây</option>
+            <option value="5" selected>5 giây (Tiêu chuẩn)</option>
+            <option value="10">10 giây</option>
+            <option value="15">15 giây</option>
+            <option value="30">30 giây</option>
+            <option value="60">60 giây</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cột bên phải: Tình trạng tablet, Phát hiện chuyển động & Nhật ký sự kiện -->
+    <aside class="sidebar-section">
+      <!-- Thẻ Tình Trạng Máy Tính Bảng (Tablet Health) -->
+      <div class="card tablet-health-card" id="tabletHealthCard">
+        <div class="card-header">
+          <h2>Tình Trạng Máy Tính Bảng</h2>
+          <span id="tabletHealthBadge" class="health-badge-pill normal">Bình thường</span>
+        </div>
+        <div class="card-body">
+          <div class="health-metrics-grid">
+            <!-- 1. Pin & Nguồn sạc -->
+            <div class="health-metric-item">
+              <div class="metric-header">
+                <span class="metric-label">Pin &amp; Nguồn sạc</span>
+                <span id="healthBatterySource" class="metric-badge">--</span>
+              </div>
+              <div class="metric-val-row">
+                <span id="healthBatteryPct" class="metric-main-val">--%</span>
+                <span id="healthBatteryHealth" class="metric-sub-val">--</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div id="healthBatteryBar" class="progress-bar-fill battery-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- 2. Nhiệt độ máy -->
+            <div class="health-metric-item">
+              <div class="metric-header">
+                <span class="metric-label">Nhiệt độ máy</span>
+                <span id="healthThermalStatus" class="metric-badge normal">--</span>
+              </div>
+              <div class="metric-val-row">
+                <span id="healthThermalVal" class="metric-main-val">-- °C</span>
+                <span id="healthThermalWarning" class="metric-sub-val" style="display:none; color: #f85149; font-weight: bold;">Cảnh báo nóng</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div id="healthThermalBar" class="progress-bar-fill thermal-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- 3. Bộ nhớ RAM -->
+            <div class="health-metric-item">
+              <div class="metric-header">
+                <span class="metric-label">Bộ nhớ RAM</span>
+                <span id="healthRamPct" class="metric-badge">--%</span>
+              </div>
+              <div class="metric-val-row">
+                <span id="healthRamVal" class="metric-main-val">-- / --</span>
+                <span id="healthRamAvail" class="metric-sub-val">Trống: --</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div id="healthRamBar" class="progress-bar-fill ram-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- 4. Bộ nhớ lưu trữ -->
+            <div class="health-metric-item">
+              <div class="metric-header">
+                <span class="metric-label">Bộ nhớ lưu trữ</span>
+                <span id="healthStorageFreePct" class="metric-badge">--</span>
+              </div>
+              <div class="metric-val-row">
+                <span id="healthStorageVal" class="metric-main-val">-- / --</span>
+                <span id="healthSnapshotsVal" class="metric-sub-val">Ảnh &amp; Video: --</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div id="healthStorageBar" class="progress-bar-fill storage-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- 5. Tín hiệu Wi-Fi -->
+            <div class="health-metric-item">
+              <div class="metric-header">
+                <span class="metric-label">Tín hiệu Wi-Fi</span>
+                <span id="healthWifiQuality" class="metric-badge">--</span>
+              </div>
+              <div class="metric-val-row">
+                <span id="healthWifiVal" class="metric-main-val">-- dBm</span>
+                <span id="healthWifiSpeed" class="metric-sub-val">-- Mbps</span>
+              </div>
+              <div class="wifi-network-name" id="healthWifiSsid">Đang kiểm tra kết nối...</div>
+            </div>
+
+            <!-- 6. Thời gian hoạt động (Uptime) -->
+            <div class="health-metric-item">
+              <div class="metric-header">
+                <span class="metric-label">Thời gian hoạt động</span>
+              </div>
+              <div class="uptime-grid">
+                <div class="uptime-item">
+                  <span class="uptime-label">Tablet:</span>
+                  <span id="healthDeviceUptime" class="uptime-val">--</span>
+                </div>
+                <div class="uptime-item">
+                  <span class="uptime-label">Giám sát:</span>
+                  <span id="healthServiceUptime" class="uptime-val">--</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thẻ phát hiện chuyển động -->
+      <div class="card motion-card">
+        <div class="card-header">
+          <h2>Phát Hiện Chuyển Động</h2>
+          <label class="switch">
+            <input type="checkbox" id="motionToggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="card-body">
+          <div class="meter-wrapper">
+            <div class="meter-label">
+              <span>Mức biến đổi hiện tại</span>
+              <span id="motionScoreVal" class="meter-value">0%</span>
+            </div>
+            <div class="meter-bar-bg">
+              <div id="motionScoreBar" class="meter-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensitivity-slider-group">
+            <div class="slider-header">
+              <label for="sensitivityInput">Độ nhạy phát hiện</label>
+              <span id="sensitivityVal">70</span>
+            </div>
+            <input type="range" id="sensitivityInput" min="10" max="95" value="70" class="range-slider">
+          </div>
+
+          <div id="latestAlertBanner" class="alert-banner idle">
+            <div class="alert-info">
+              <div id="alertTitle" class="alert-title">Không gian yên tĩnh</div>
+              <div id="alertTime" class="alert-time">Đang giám sát khung hình...</div>
+            </div>
+            <button id="alertQuickViewBtn" class="alert-quick-btn" style="display: none;">Xem video clip ngay</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thẻ cấu hình cảnh báo Gmail & Video đính kèm -->
+      <div class="card email-card">
+        <div class="card-header">
+          <h2>Báo Động Gmail (Kèm Video Clip)</h2>
+          <label class="switch">
+            <input type="checkbox" id="emailAlertsToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Tự động ghi lại đoạn video 3-5 giây và gửi email thông báo kèm video &amp; ảnh chụp khi phát hiện chuyển động.</p>
+          <div class="form-row">
+            <div class="form-group flex-2">
+              <label for="smtpHostInput">Máy chủ SMTP:</label>
+              <input type="text" id="smtpHostInput" class="form-control" value="smtp.gmail.com" placeholder="smtp.gmail.com">
+            </div>
+            <div class="form-group flex-1">
+              <label for="smtpPortInput">Cổng:</label>
+              <select id="smtpPortInput" class="form-select">
+                <option value="587" selected>587 (TLS)</option>
+                <option value="465">465 (SSL)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="smtpUsernameInput">Gmail gửi cảnh báo:</label>
+            <input type="email" id="smtpUsernameInput" class="form-control" placeholder="ban@gmail.com">
+          </div>
+          <div class="form-group">
+            <label for="smtpPasswordInput">Mật khẩu ứng dụng (Google App Password):</label>
+            <input type="password" id="smtpPasswordInput" class="form-control" placeholder="16 ký tự mã ứng dụng Google">
+            <small class="form-hint">Mẹo: Tài khoản Google &gt; Bảo mật &gt; Xác minh 2 bước &gt; Mật khẩu ứng dụng.</small>
+          </div>
+          <div class="form-group">
+            <label for="smtpRecipientInput">Gmail người nhận:</label>
+            <input type="email" id="smtpRecipientInput" class="form-control" placeholder="nguoinhan@gmail.com">
+          </div>
+          <div class="email-btn-group">
+            <button id="saveEmailConfigBtn" class="btn btn-primary">Lưu Cài Đặt Email</button>
+            <button id="testEmailBtn" class="btn btn-outline">Gửi Thử Email</button>
+          </div>
+          <div id="emailStatusMsg" class="status-msg" style="display: none;"></div>
+        </div>
+      </div>
+
+      <!-- Thẻ danh sách sự kiện -->
+      <div class="card events-card">
+        <div class="card-header">
+          <h2>Nhật Ký Sự Kiện (<span id="eventCountHeader">0</span>)</h2>
+          <div class="event-actions">
+            <button id="refreshEventsBtn" class="btn btn-sm btn-outline">Làm mới</button>
+            <button id="clearAllEventsBtn" class="btn btn-sm btn-danger-outline">Xóa hết</button>
+          </div>
+        </div>
+        <div class="card-body event-list-container">
+          <div id="eventList" class="event-list">
+            <div class="empty-state">Chưa có sự kiện chuyển động nào</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Modal ghép nối -->
+  <div id="pairModal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Xác Thực & Ghép Nối Trình Xem</h3>
+      </div>
+      <div class="modal-body">
+        <p>Để đảm bảo an toàn riêng tư, vui lòng nhập mã ghép nối 6 chữ số đang hiển thị trên màn hình máy tính bảng WatchCam:</p>
+        <div class="form-group">
+          <input type="text" id="pairCodeInput" maxlength="8" placeholder="Nhập mã (VD: 123456)" class="pair-code-input" autofocus autocomplete="off" />
+        </div>
+        <p style="font-size: 0.82rem; color: #8b949e; margin-top: 6px; margin-bottom: 0;">Lưu ý: Thiết bị này sẽ được tự động ghi nhớ vĩnh viễn sau khi ghép nối thành công.</p>
+        <div id="pairError" class="error-msg" style="display: none; margin-top: 10px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="submitPairBtn" class="btn btn-primary btn-block">Xác Nhận Ghép Nối</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal xem ảnh sự kiện phóng to -->
+  <div id="snapshotModal" class="modal-backdrop">
+    <div class="modal-box modal-lg">
+      <div class="modal-header">
+        <h3 id="modalEventTitle">Chi Tiết Sự Kiện Chuyển Động</h3>
+        <button id="closeSnapshotModalBtn" class="btn-close">Đóng</button>
+      </div>
+      <div class="modal-body text-center">
+        <div class="modal-snapshot-wrapper">
+          <img id="modalSnapshotImg" src="" alt="Ảnh chụp sự kiện" class="snapshot-full" />
+          <div id="modalDetectionBox" class="modal-detection-box" style="display: none;"></div>
+        </div>
+        <video id="modalVideoPlayer" controls playsinline preload="auto" class="snapshot-full" style="display: none; margin-top: 10px;"></video>
+        <div class="snapshot-meta">
+          <span id="modalEventTime"></span> &bull;
+          <span id="modalEventScore"></span> &bull;
+          <span id="modalEventCamera"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="toggleMediaViewBtn" class="btn btn-outline" style="display: none;">Xem Video Clip</button>
+        <a id="downloadSnapshotBtn" href="#" download class="btn btn-secondary">Tải ảnh JPEG</a>
+        <a id="downloadVideoBtn" href="#" download class="btn btn-primary" style="display: none;">Tải Video MP4</a>
+        <button id="deleteEventBtn" class="btn btn-danger">Xóa sự kiện này</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Hướng Dẫn Mở Quyền Micro -->
+  <div id="micGuideModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box modal-lg">
+      <div class="modal-header">
+        <h3 id="micGuideModalTitle">Quyền Sử Dụng Micro Bị Chặn Bởi Trình Duyệt</h3>
+        <button id="closeMicGuideModalBtn" class="btn-close" type="button">Đóng</button>
+      </div>
+      <div class="modal-body">
+        <div class="guide-box">
+          <h4 class="guide-heading">Tại sao micro bị chặn?</h4>
+          <p class="guide-desc">Trình duyệt (Brave, Google Chrome, Microsoft Edge) chỉ cho phép mở micro trên kết nối an toàn (HTTPS hoặc localhost). Khi truy cập qua địa chỉ IP bằng HTTP thông thường không mã hóa, trình duyệt sẽ tự động vô hiệu hóa tính năng thu âm.</p>
+        </div>
+
+        <div class="guide-box" style="margin-top: 14px;">
+          <h4 class="guide-heading">Cách 1: Chuyển sang kết nối an toàn HTTPS (Khuyên dùng)</h4>
+          <p class="guide-desc">Máy chủ WatchCam đã tích hợp sẵn chứng chỉ bảo mật trên cổng kết nối an toàn. Bạn có thể mở liên kết HTTPS và chọn "Nâng cao &gt; Tiếp tục truy cập" trên trình duyệt:</p>
+          <div style="margin-top: 8px;">
+            <a id="btnSwitchToHttps" href="#" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Mở WatchCam qua kết nối HTTPS (Cổng 8443)</a>
+          </div>
+        </div>
+
+        <div class="guide-box" style="margin-top: 14px;">
+          <h4 class="guide-heading">Cách 2: Mở quyền micro tức thì trong 30 giây cho Brave / Chrome</h4>
+          <p class="guide-desc">Nếu bạn muốn tiếp tục sử dụng địa chỉ hiện tại trên kết nối HTTP, hãy làm theo 3 bước sau:</p>
+          <div class="guide-steps">
+            <div class="guide-step-item">
+              <p><strong>Bước 1:</strong> Mở tab mới trên trình duyệt, truy cập địa chỉ cấu hình cờ tính năng:</p>
+              <div class="guide-copy-row">
+                <input type="text" id="browserFlagUrlInput" readonly class="guide-input-field" value="brave://flags/#unsafely-treat-insecure-origin-as-secure" />
+                <button id="btnCopyFlagUrl" class="btn btn-secondary" type="button">Sao chép địa chỉ cờ</button>
+              </div>
+            </div>
+            <div class="guide-step-item" style="margin-top: 10px;">
+              <p><strong>Bước 2:</strong> Dán địa chỉ URL của máy ảnh vào ô <strong>Insecure origins treated as secure</strong>:</p>
+              <div class="guide-copy-row">
+                <input type="text" id="cameraOriginInput" readonly class="guide-input-field" value="" />
+                <button id="btnCopyOriginUrl" class="btn btn-secondary" type="button">Sao chép URL máy ảnh</button>
+              </div>
+            </div>
+            <div class="guide-step-item" style="margin-top: 10px;">
+              <p><strong>Bước 3:</strong> Chọn <strong>Enabled</strong> trong danh sách lựa chọn, sau đó bấm nút <strong>Relaunch</strong> ở góc dưới để khởi động lại trình duyệt.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span id="copyFeedbackText" class="guide-copy-feedback" style="display: none;">Đã sao chép vào bộ nhớ tạm</span>
+        <button id="closeMicGuideFooterBtn" class="btn btn-secondary" type="button">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <audio id="alertAudio" preload="auto">
+    <source src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU9vT18A" type="audio/wav">
+  </audio>
+
+  <script src="app.js"></script>
+</body>
+</html>

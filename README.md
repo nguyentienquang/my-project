@@ -45,6 +45,7 @@ Hệ thống hoạt động **hoàn toàn khép kín trong mạng nội bộ (Wi
    - [Mốc 12: Hỗ Trợ Đàm Thoại 2 Chiều Trên Mạng Tailscale / Không Dùng Chung Mạng & Tích Hợp Native HTTPS / TLS Trong Rust Core](#mốc-12-hỗ-trợ-đàm-thoại-2-chiều-trên-mạng-tailscale--không-dùng-chung-mạng--tích-hợp-native-https--tls-trong-rust-core)
    - [Mốc 13: Tối Ưu Hóa Thuật Toán Nhận Diện Chuyển Động Siêu Mượt & Bền Vững (Spatial Clustering, Temporal EMA Smoothing, Global Lighting Shift Suppression, 60 FPS Web UI Interpolation & Smooth Fade-Out)](#mốc-13-tối-ưu-hóa-thuật-toán-nhận-diện-chuyển-động-siêu-mượt--bền-vững-spatial-clustering-temporal-ema-smoothing-global-lighting-shift-suppression-60-fps-web-ui-interpolation--smooth-fade-out)
    - [Mốc 14: Tối Ưu Hóa Nhận Diện Khi Quay Ngược Camera & Chuyển Đổi Không Gian Tọa Độ Hình Học (Coordinate Transformations & Rotation Optimization)](#47-tối-ưu-hóa-nhận-diện-khi-quay-ngược-camera--chuyển-đổi-không-gian-tọa-độ-hình-học)
+   - [Mốc 15: Bảo Vệ Quyền Riêng Tư (Privacy Hardening) - Loại Bỏ Hoàn Toàn Hiển Thị Mạng Tailscale / VPN & Rà Soát Làm Sạch Thông Tin Bí Mật Cá Nhân](#mốc-15-bảo-vệ-quyền-riêng-tư-privacy-hardening---loại-bỏ-hoàn-toàn-hiển-thị-mạng-tailscale--vpn--rà-soát-làm-sạch-thông-tin-bí-mật-cá-nhân)
 5. [Cấu Trúc Thư Mục & Bản Đồ Mã Nguồn (Codebase Map)](#5-cấu-trúc-thư-mục--bản-đồ-mã-nguồn-codebase-map)
 6. [Thông Số Kỹ Thuật & Đặc Tả Giao Thức (Specifications)](#6-thông-số-kỹ-thuật--đặc-tả-giao-thức-specifications)
    - [6.1 Danh mục REST API Endpoints](#61-danh-mục-rest-api-endpoints)
@@ -760,15 +761,15 @@ Dự án WatchCam đã trải qua một quá trình nghiên cứu, thiết kế,
 
 #### 1. Bối cảnh & Phân tích Nguyên nhân Gốc rễ (Root Cause Analysis):
 - **Hiện tượng người dùng gặp phải:**
-  - Người dùng không còn kết nối chung mạng Wi-Fi cục bộ với máy tính bảng WatchCam mà kết nối từ xa qua mạng Tailscale (chạy extension trong trình duyệt Brave) tới địa chỉ IP `http://100.70.16.26:8080`.
+  - Người dùng không còn kết nối chung mạng Wi-Fi cục bộ với máy tính bảng WatchCam mà kết nối từ xa qua mạng riêng (chạy extension trong trình duyệt Brave) tới địa chỉ IP `http://100.x.y.z:8080`.
   - Khi nhấn giữ nút "Giữ để nói (Đàm thoại 2 chiều)", trình duyệt bật ra thông báo lỗi:
-    `100.70.16.26:8080 cho biết: Không thể mở micro máy tính/điện thoại: Cannot read properties of undefined (reading 'getUserMedia')`.
+    `100.x.y.z:8080 cho biết: Không thể mở micro máy tính/điện thoại: Cannot read properties of undefined (reading 'getUserMedia')`.
 - **Nguyên nhân cốt lõi về bảo mật trình duyệt:**
   - Trong tiêu chuẩn bảo mật Web hiện đại (W3C WebRTC và Chromium Security Policy áp dụng cho Brave, Google Chrome, Microsoft Edge, Mozilla Firefox, Apple Safari), quyền truy cập phần cứng nhạy cảm (như Micro và Camera qua `navigator.mediaDevices.getUserMedia`) **bắt buộc phải nằm trong Ngữ Cảnh An Toàn (Secure Context)**.
   - Ngữ cảnh an toàn chỉ được trình duyệt kích hoạt trong hai trường hợp:
     1. Giao thức HTTPS (`https://...`).
     2. Tên miền hoặc địa chỉ cục bộ máy tính (`http://localhost`, `http://127.0.0.1`, `http://[::1]`).
-  - Khi truy cập máy chủ giám sát qua bất kỳ địa chỉ IP từ xa nào qua giao thức HTTP không mã hóa (ví dụ IP mạng Tailscale `http://100.70.16.26:8080` hoặc IP mạng khác dải con), thuộc tính `window.isSecureContext` có giá trị `false`. Trình duyệt chủ động xóa bỏ hoàn toàn đối tượng `navigator.mediaDevices` khỏi môi trường thực thi JavaScript (`navigator.mediaDevices` trở thành `undefined`).
+  - Khi truy cập máy chủ giám sát qua bất kỳ địa chỉ IP từ xa nào qua giao thức HTTP không mã hóa (ví dụ IP mạng riêng `http://100.x.y.z:8080` hoặc IP mạng khác dải con), thuộc tính `window.isSecureContext` có giá trị `false`. Trình duyệt chủ động xóa bỏ hoàn toàn đối tượng `navigator.mediaDevices` khỏi môi trường thực thi JavaScript (`navigator.mediaDevices` trở thành `undefined`).
   - Việc gọi `navigator.mediaDevices.getUserMedia(...)` trong mã nguồn cũ ngay lập tức ném lỗi ngoại lệ kiểu dữ liệu `TypeError: Cannot read properties of undefined (reading 'getUserMedia')`. Trình xử lý lỗi cũ chỉ đơn thuần gọi `alert()` hiển thị lỗi JavaScript thô, không hướng dẫn người dùng cách khắc phục và không có giải pháp thay thế.
 
 #### 2. Giải pháp Cải tiến Giao diện Web Dashboard (`web/app.js`, `web/index.html`, `web/style.css`):
@@ -786,7 +787,7 @@ Dự án WatchCam đã trải qua một quá trình nghiên cứu, thiết kế,
     - **Cơ chế chuyển giao phiên xác thực tự động (Seamless Cross-Origin Token Migration):** Vì `localStorage` bị cách ly theo nguồn gốc (Origin), chuyển từ `http://` sang `https://` sẽ bị mất token. WatchCam tự động đính kèm mã xác thực an toàn qua tham số `?token=...` trên liên kết chuyển đổi. Khi trang HTTPS được tải, mã nguồn JavaScript lập tức tiếp nhận token, lưu trữ vào `localStorage` của nguồn gốc HTTPS mới và tự động dọn dẹp sạch thanh địa chỉ qua `history.replaceState` để bảo mật, giúp người dùng không phải ghép nối lại từ đầu.
   - **Cách 2: Cấp quyền micro cho kết nối HTTP hiện tại trong 30 giây (Brave / Chrome flags):**
     - Bước 1: Mở tab mới truy cập cờ tính năng: `brave://flags/#unsafely-treat-insecure-origin-as-secure` (nếu dùng Brave) hoặc `chrome://flags/#unsafely-treat-insecure-origin-as-secure` (nếu dùng Chrome). Tự động nhận diện Brave, Edge, Opera, Chrome và đi kèm nút bấm "Sao chép địa chỉ cờ".
-    - Bước 2: Dán địa chỉ URL máy ảnh vào ô "Insecure origins treated as secure". Đi kèm nút bấm "Sao chép URL máy ảnh" (ví dụ `http://100.70.16.26:8080`).
+    - Bước 2: Dán địa chỉ URL máy ảnh vào ô "Insecure origins treated as secure". Đi kèm nút bấm "Sao chép URL máy ảnh" (ví dụ `http://100.x.y.z:8080`).
     - Bước 3: Đổi tùy chọn sang Enabled và bấm nút Relaunch để khởi động lại trình duyệt.
   - Tích hợp cơ chế sao chép clipboard an toàn hỗ trợ cả `navigator.clipboard.writeText` và lệnh dự phòng `document.execCommand('copy')` dành cho môi trường HTTP không an toàn, đồng thời hỗ trợ bấm trực tiếp vào ô nhập để tự động bôi đen toàn bộ văn bản (click-to-select).
   - Tích hợp thông báo xác nhận sao chép trực quan ("Đã sao chép vào bộ nhớ tạm") tự biến mất sau 3 giây.
@@ -800,7 +801,7 @@ Dự án WatchCam đã trải qua một quá trình nghiên cứu, thiết kế,
     - `axum-server` (v0.7, tính năng `tls-rustls-no-provider`): Lớp phục vụ máy chủ tích hợp trực tiếp Axum với TLS Rustls.
 - **Tạo Module Native TLS Chuyên Biệt Với Cơ Chế Dò Tìm IP Tự Động (`rust_core/src/tls.rs`):**
   - `discover_local_ips()`: Truy vấn bảng định tuyến hạt nhân (Kernel Routing Table / FIB lookup) qua các thăm dò socket UDP (`8.8.8.8`, `100.100.100.100`, `10.255.255.255`, `172.16.0.1`, `192.168.1.1`). Thao tác này hoàn toàn không phát sinh gói tin mạng, thực thi tức thời trong 0 mili-giây.
-  - `generate_self_signed_cert_pem_with_ips()`: Khởi tạo cặp chứng chỉ và khóa riêng tư PEM với đầy đủ Tên Định Danh SANs (Subject Alternative Names) cho `localhost`, `127.0.0.1`, và **toàn bộ IP đang hoạt động bao gồm cả IP mạng nội bộ Wi-Fi (`192.168.16.110`) và IP mạng Tailscale (`100.70.16.26`)**. Nhờ đó, trình duyệt không báo lỗi `NET::ERR_CERT_COMMON_NAME_INVALID` mà nhận diện chính xác chứng chỉ thuộc về đúng địa chỉ máy chủ.
+  - `generate_self_signed_cert_pem_with_ips()`: Khởi tạo cặp chứng chỉ và khóa riêng tư PEM với đầy đủ Tên Định Danh SANs (Subject Alternative Names) cho `localhost`, `127.0.0.1`, và **toàn bộ IP đang hoạt động bao gồm cả IP mạng nội bộ Wi-Fi (`192.168.1.100`) và IP ví dụ (`100.x.y.z`)**. Nhờ đó, trình duyệt không báo lỗi `NET::ERR_CERT_COMMON_NAME_INVALID` mà nhận diện chính xác chứng chỉ thuộc về đúng địa chỉ máy chủ.
   - `create_rustls_config()`: Chuyển đổi cặp PEM thành đối tượng `RustlsConfig` sẵn sàng cho máy chủ Axum.
 - **Cơ chế Chạy Song Song Hai Giao Thức (Dual HTTP/HTTPS Server Mode) trong `rust_core/src/lib.rs`:**
   - Máy chủ HTTP tiếp tục hoạt động bền bỉ trên cổng mặc định 8080 qua `axum::serve`.
@@ -810,8 +811,8 @@ Dự án WatchCam đã trải qua một quá trình nghiên cứu, thiết kế,
 - **Hiển Thị Đa Điểm Truy Cập Mạng Trên Ứng Dụng Máy Tính Bảng (`MainActivity.kt`, `NetworkHelper.kt`):**
   - `NetworkHelper.getAllEndpoints()`: Tự động phân loại và nhận diện các giao diện mạng Wi-Fi, Ethernet và Tailscale VPN.
   - Màn hình chính của máy tính bảng hiển thị rõ ràng cả 2 địa chỉ truy cập:
-    - `Wi-Fi: http://192.168.16.110:8080 | https://192.168.16.110:8443`
-    - `Tailscale: http://100.70.16.26:8080 | https://100.70.16.26:8443`
+    - `Wi-Fi: http://192.168.1.100:8080 | https://192.168.1.100:8443`
+    - `Tailscale: http://100.x.y.z:8080 | https://100.x.y.z:8443`
   - Người dùng ở bất kỳ đâu, dùng mạng chung hay Tailscale, đều nắm bắt ngay địa chỉ để kết nối chuẩn xác.
 
 #### 4. Kết quả Kiểm thử Toàn diện & Xác thực Thực tế Trên Thiết Bị:
@@ -831,7 +832,7 @@ Dự án WatchCam đã trải qua một quá trình nghiên cứu, thiết kế,
   - Lệnh kiểm tra mạng qua ADB shell xác nhận cả hai cổng đang mở và lắng nghe đồng thời:
     - `tcp 0 0 0.0.0.0:8080 0.0.0.0:* LISTEN` (HTTP)
     - `tcp 0 0 0.0.0.0:8443 0.0.0.0:* LISTEN` (HTTPS)
-  - Xác nhận chứng chỉ số X.509 phục vụ trên cổng 8443 chứa đầy đủ SANs cho `127.0.0.1`, `localhost`, `192.168.16.110` và `100.70.16.26`.
+  - Xác nhận chứng chỉ số X.509 phục vụ trên cổng 8443 chứa đầy đủ SANs cho `127.0.0.1`, `localhost`, `192.168.1.100` và `100.x.y.z`.
   - Kiểm tra gọi API `/api/status` qua cả hai cổng HTTP và HTTPS đều trả về dữ liệu giám sát trực tiếp hoàn hảo với camera sau hoạt động và `"httpsPort": 8443`.
   - Xác nhận màn hình máy tính bảng hiển thị sắc nét cả 2 dòng địa chỉ Wi-Fi và Tailscale cùng mã ghép nối bảo mật 6 số.
 
@@ -1018,6 +1019,52 @@ Dự án WatchCam đã trải qua một quá trình nghiên cứu, thiết kế,
   - Cài đặt thành công qua ADB: `Success`.
   - Khởi chạy ứng dụng: Luồng camera hoạt động ổn định ở tốc độ 30.00 FPS (`BufferQueueProducer: SurfaceView queueBuffer: fps=30.00`).
   - Xác nhận máy chủ Web phục vụ trực tiếp tệp `app.js` đã được tích hợp đầy đủ công thức chuyển đổi hình học affine cho mọi góc độ xoay. Bounding Box hiển thị chuẩn xác trên đối tượng di chuyển khi xoay luồng xem trực tiếp ở các góc `0°`, `90°`, `180°`, `270°`.
+
+---
+
+### Mốc 15: Bảo Vệ Quyền Riêng Tư (Privacy Hardening) - Loại Bỏ Hoàn Toàn Hiển Thị Mạng Tailscale / VPN & Rà Soát Làm Sạch Thông Tin Bí Mật Cá Nhân
+
+#### 1. Bối cảnh & Yêu Cầu Bảo Mật:
+- **Nhu cầu chia sẻ thử nghiệm an toàn:**
+  - Thiết bị máy tính bảng giám sát WatchCam được chuẩn bị để chia sẻ cho bạn bè và người dùng khác thử nghiệm tính năng giám sát và nhận diện thực thể.
+  - Người dùng không muốn vô tình để lộ địa chỉ mạng riêng ảo cá nhân (Tailscale IP, VPN overlay network) hoặc tài khoản Gmail cá nhân khi bàn giao thiết bị hoặc gửi gói ứng dụng.
+- **Mục tiêu kỹ thuật:**
+  1. Loại bỏ hoàn toàn việc hiển thị đường dẫn mạng Tailscale / VPN trên giao diện màn hình ứng dụng máy tính bảng (`MainActivity.kt`, `NetworkHelper.kt`). Màn hình ứng dụng chỉ hiển thị duy nhất đường link mạng nội bộ Wi-Fi / LAN (`http://192.168.x.x:8080 | https://192.168.x.x:8443`).
+  2. Loại bỏ việc phân giải và thu thập các giao diện mạng ảo (`tun*`, `tailscale*`, `ppp*`, `p2p*`) cũng như dải địa chỉ IP CGNAT Tailscale (`100.64.0.0/10`) trong `NetworkHelper.kt`.
+  3. Lọc bỏ toàn bộ dải IP Tailscale / CGNAT khỏi hàm sinh chứng chỉ số tự ký TLS trong lõi Rust Core (`rust_core/src/tls.rs`), ngăn chặn rò rỉ địa chỉ IP riêng qua Subject Alternative Names (SANs) của chứng chỉ HTTPS X.509 khi kiểm tra trên trình duyệt.
+  4. Quét toàn bộ kho mã nguồn và tài liệu dự án để loại bỏ triệt để các thông tin cá nhân:
+     - Thay thế toàn bộ địa chỉ email cá nhân hoặc tài khoản thử nghiệm thành placeholder mẫu chuẩn (`ban@gmail.com`, `nguoinhan@gmail.com`).
+     - Bảo đảm tệp layout `activity_main.xml` không chứa sẵn email hoặc mật khẩu mặc định trong thuộc tính `android:text`.
+     - Thay thế các địa chỉ IP mạng riêng cụ thể trong tài liệu hướng dẫn và mã kiểm thử thành địa chỉ mẫu (`100.x.y.z`, `192.168.1.100`).
+  5. Bổ sung cơ chế tự động dọn dẹp dữ liệu cấu hình cũ (sanitizing legacy shared preferences) trong `MainActivity.kt` và xóa sạch dữ liệu ứng dụng trên máy tính bảng IvyPad Smart 5 (`AYZ2026040096`).
+
+#### 2. Chi Tiết Thực Hiện:
+- **Cải tiến Lớp Quản Lý Mạng (`NetworkHelper.kt`):**
+  - Hàm `isIgnoredInterface()`: Chủ động nhận diện và loại trừ toàn diện tất cả các giao diện mạng ảo, VPN, đường hầm và dữ liệu di động (`tun*`, `tailscale*`, `ppp*`, `p2p*`, `wg*`, `tap*`, `rmnet*`, `ccmni*`, `dummy*`, `sit*`, `ip6tnl*`, `docker*`, `veth*`, `virbr*`).
+  - Hàm `isValidLocalIpv4()`: Xác thực chặt chẽ địa chỉ IPv4 nội bộ chuẩn RFC 1918 (mạng Wi-Fi cục bộ và Ethernet), đồng thời loại trừ triệt để địa chỉ loopback (`127.0.0.0/8`), Tailscale CGNAT (`100.64.0.0/10`) và link-local (`169.254.0.0/16`).
+  - Cập nhật hàm `getAllEndpoints()` và `getLocalIpAddress()`: Chỉ thu thập và gắn nhãn cho mạng Wi-Fi (`wlan*`) hoặc Ethernet (`eth*`), ưu tiên tuyệt đối Wi-Fi và không bao giờ để rò rỉ bất kỳ địa chỉ mạng ảo nào.
+- **Cải tiến Hiển Thị Trên Màn Hình Máy Tính Bảng (`MainActivity.kt`):**
+  - Hàm `updateNetworkUrlDisplay()`: Đảm bảo chỉ hiển thị duy nhất một dòng liên kết mạng nội bộ Wi-Fi chính thức dạng `Wi-Fi: http://<ip>:8080 | https://<ip>:8443`. Loại bỏ hoàn toàn hiển thị đa giao diện hoặc mạng Tailscale.
+  - Hàm `loadSavedEmailConfig()`: Áp dụng cơ chế di chuyển an toàn thông qua cờ bảo mật nội bộ `privacy_sanitized_v1` để làm sạch toàn diện các thông tin tài khoản lưu trữ cũ trên thiết bị thử nghiệm mà tuyệt đối không chứa bất kỳ chuỗi thông tin cá nhân cứng nào trong mã nguồn.
+- **Bảo Vệ Chứng Chỉ TLS Trong Rust Core (`rust_core/src/tls.rs`):**
+  - Trong hàm `discover_local_ips()`: Loại bỏ mục tiêu thăm dò IP Tailscale CGNAT và thêm bộ lọc `is_cgnat_or_vpn` để loại trừ các địa chỉ thuộc octet đầu là 100 khỏi danh sách Subject Alternative Names (SANs) của chứng chỉ X.509.
+- **Rà Soát Và Làm Sạch Toàn Diện Kho Mã Nguồn:**
+  - Cập nhật các bài kiểm thử đơn vị trong `rust_core/src/lib.rs`, `rust_core/src/server.rs`, `rust_core/src/tls.rs` và `app/src/test/java/com/watchcam/android/SmtpClientTest.kt`: Thay thế toàn bộ địa chỉ email và IP cụ thể bằng các chuỗi mẫu an toàn (`ban@gmail.com`, `nguoinhan@gmail.com`, `192.168.1.100`).
+  - Cập nhật tệp layout `app/src/main/res/layout/activity_main.xml` và giao diện web `web/index.html`: Sử dụng gợi ý nhập liệu placeholder chuẩn (`ban@gmail.com`, `nguoinhan@gmail.com`), không điền sẵn dữ liệu trong `android:text`.
+  - Bổ sung các bài kiểm thử tự động `testGetAllEndpointsExcludesTailscaleAndVpn`, `testIsIgnoredInterfaceFiltersVpnCellularAndTunnels`, và `testIsValidLocalIpv4` trong `NetworkHelperTest.kt` nhằm bảo đảm vĩnh viễn không tái phát sinh lỗi hiển thị IP Tailscale/VPN.
+
+#### 3. Kết Quả Kiểm Thử & Xác Thực Toàn Diện:
+- **Kiểm thử Đơn vị Lõi Rust Core (`cargo test`):** Đạt 76/76 bài kiểm thử thành công (100%).
+- **Biên dịch Release Cross-Compile Cho 3 Kiến Trúc Android:**
+  - `aarch64-linux-android` -> `app/src/main/jniLibs/arm64-v8a/libwatchcam_core.so`
+  - `armv7-linux-androideabi` -> `app/src/main/jniLibs/armeabi-v7a/libwatchcam_core.so`
+  - `x86_64-linux-android` -> `app/src/main/jniLibs/x86_64/libwatchcam_core.so`
+- **Kiểm thử Đơn vị Android Kotlin (`.\gradlew testDebugUnitTest`):** Đạt 35/35 bài kiểm thử thành công (100%), bao gồm các bài kiểm thử xác thực bộ lọc giao diện và địa chỉ IP.
+- **Đóng gói Gói Cài Đặt Android (`.\gradlew assembleDebug`):** Hoàn tất thành công, tạo gói APK sạch không chứa thông tin bí mật.
+- **Triển khai & Chụp Ảnh Xác Thực Trực Tiếp Trên IvyPad Smart 5 (`AYZ2026040096`):**
+  - Thực hiện xóa sạch dữ liệu ứng dụng qua ADB (`pm clear com.watchcam.android`) và cài đặt phiên bản mới.
+  - Ảnh chụp màn hình phần trên xác nhận mục "ĐỊA CHỈ TRUY CẬP TRÌNH DUYỆT" chỉ hiển thị duy nhất đường link mạng Wi-Fi cục bộ: `Wi-Fi: http://192.168.x.x:8080 | https://192.168.x.x:8443`. Hoàn toàn không còn xuất hiện dòng Tailscale.
+  - Ảnh chụp màn hình phần dưới xác nhận khu vực cấu hình Gmail hoàn toàn trống rỗng, chỉ hiển thị gợi ý placeholder mờ `ban@gmail.com` và `nguoinhan@gmail.com`. Hoàn toàn không còn dấu vết thông tin cá nhân hay mật khẩu ứng dụng.
 
 ---
 

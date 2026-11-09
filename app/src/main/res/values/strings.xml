@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WatchCam</string>
+
+    <!-- Notification -->
+    <string name="notification_channel_name">Kênh Giám Sát WatchCam</string>
+    <string name="notification_channel_desc">Duy trì máy chủ giám sát hoạt động liên tục trong nền</string>
+    <string name="notification_title">WatchCam đang hoạt động</string>
+    <string name="notification_text">Bảng điều khiển: %s</string>
+    <string name="action_stop_surveillance">Dừng giám sát</string>
+
+    <!-- Main UI -->
+    <string name="title_live_preview">Khung Hình Giám Sát</string>
+    <string name="status_monitoring">ĐANG GIÁM SÁT</string>
+    <string name="status_stopped">TẠM DỪNG</string>
+    <string name="btn_start_surveillance">BẮT ĐẦU GIÁM SÁT</string>
+    <string name="btn_stop_surveillance">DỪNG GIÁM SÁT</string>
+    <string name="btn_switch_camera">Đổi Camera</string>
+
+    <!-- Network and Pairing -->
+    <string name="label_network_url">ĐỊA CHỈ TRUY CẬP TRÌNH DUYỆT</string>
+    <string name="label_pairing_code">MÃ GHÉP NỐI BẢO MẬT</string>
+    <string name="label_stats">THỐNG KÊ HOẠT ĐỘNG</string>
+    <string name="label_viewers">Người xem: %d</string>
+    <string name="label_fps">Khung hình: %.1f FPS</string>
+    <string name="label_motion_status">Biến đổi chuyển động: %d%%</string>
+    <string name="label_sensitivity">Độ nhạy phát hiện: %d</string>
+    <string name="label_motion_toggle">Bật phát hiện chuyển động</string>
+
+    <!-- Permissions -->
+    <string name="camera_permission_required">WatchCam cần quyền truy cập Camera để ghi hình và phát hiện chuyển động an ninh.</string>
+    <string name="btn_grant_permission">Cấp quyền Camera</string>
+</resources>
