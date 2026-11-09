@@ -913,9 +913,18 @@ Dự án WatchCam đã trải qua một quá trình nghiên cứu, thiết kế,
     `leftPx = offsetX + bx * renderW`
     `topPx = offsetY + by * renderH`
   - Do lớp hiển thị hộp bao `detectionOverlay` không nhận diện góc quay `currentRotation`, hộp bao vẫn được vẽ theo hệ tọa độ gốc. Khi video bị xoay `180°`, đối tượng di chuyển ở góc dưới bên phải màn hình thực tế lại bị vẽ hộp bao ở góc trên bên trái (đối xứng hoàn toàn qua tâm). Tương tự ở các góc `90°` và `270°`, hộp bao bị lệch tỉ lệ khung hình (width và height không được hoán vị) và không khớp hệ số thu phóng `scale`.
-- **Thiếu Bộ Lắng Nghe Cảm Biến Hướng Vật Lý Trên Android (OrientationEventListener):**
-  - Trong tệp `AndroidManifest.xml`, thẻ Activity khai báo thuộc tính `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"`. Khai báo này giúp Activity không bị hủy và tạo lại khi xoay thiết bị.
-  - Tuy nhiên, trong `CameraManager.kt`, việc khởi tạo các use case CameraX (`ImageAnalysis` và `Preview`) ban đầu chưa gán bộ lắng nghe hướng xoay vật lý liên tục. Khi người dùng quay ngược máy tính bảng `180°` trong lúc dịch vụ giám sát đang hoạt động ngầm, CameraX không tự động cập nhật `targetRotation`, dẫn đến `imageProxy.imageInfo.rotationDegrees` không được làm mới.
+- **Méo Tỉ Lệ Khung Hình Trong Bộ Đệm Phân Tích (Aspect Ratio Distortion In Portrait Analysis Buffer):**
+  - Trong `rust_core/src/motion.rs`, kích thước bộ đệm phân tích chuyển động được cố định ở `160x120` (tỉ lệ 4:3 nằm ngang).
+  - Khi camera xoay ở góc `90°` hoặc `270°` (chế độ đứng - portrait), khung hình thực tế có kích thước `480x640` (tỉ lệ 3:4).
+  - Thuật toán nhận diện đối tượng trước đây tính tỉ lệ dạng đứng của đối tượng dựa trên số pixel lưới thô của bộ đệm:
+    `aspect_ratio = pixel_h / pixel_w`.
+  - Trong bộ đệm `160x120`, mỗi pixel theo trục X đại diện cho `480 / 160 = 3.0` pixel thực tế, trong khi mỗi pixel theo trục Y đại diện cho `640 / 120 = 5.333` pixel thực tế. Điều này làm cho tỉ lệ đối tượng theo chiều dọc bị nén co lại `1.7778` lần so với thực tế.
+  - Kết quả là một người đứng thẳng có tỉ lệ thực tế `1.8` chỉ còn hiển thị với tỉ lệ `1.01` trong bộ đệm, không thỏa mãn điều kiện `aspect_ratio >= 1.2` của mô hình nhận diện người, khiến hệ thống nhận diện sai thành vật thể hoặc chuyển động chung.
+- **Không Đặt Lại Trạng Thái Bộ Nhận Diện Khi Đổi Góc Quay Hoặc Chuyển Đổi Camera:**
+  - Khi người dùng lật ngược camera `180°` hoặc chuyển đổi giữa camera trước và camera sau, bộ phát hiện chuyển động `MotionDetector` vẫn giữ nguyên bộ đệm tham chiếu `previous_buffer` và hộp bao làm mượt `smoothed_bbox` của góc quay hoặc camera cũ.
+  - Khung hình đầu tiên ngay sau khi xoay bị so sánh với ảnh chưa xoay của khung hình trước đó, gây ra sự sai lệch cực lớn trên toàn bộ màn hình (`motion_score > 0.85`), đồng thời bộ lọc làm mượt trung bình động theo cấp số nhân (EMA) cố gắng nội suy giữa tọa độ cũ và tọa độ mới, khiến hộp bao bị kéo lê chéo qua màn hình.
+- **Khởi Tạo Góc Quay Mặc Định Trong CameraManager.kt Cố Định Surface.ROTATION_0:**
+  - Biến `currentTargetRotation` trước đây được gán cứng giá trị ban đầu là `Surface.ROTATION_0`. Nếu thiết bị đang được đặt cố định trên giá đỡ theo hướng ngược `180°` hoặc nằm ngang trước khi bật camera, bộ lắng nghe `OrientationEventListener` không phát sinh sự kiện thay đổi hướng mới, khiến luồng camera và góc quay bị kẹt ở hướng mặc định.
 
 #### 2. Dẫn Xuất Hình Học Chuyển Đổi Tọa Độ Bounding Box (Mathematical Geometric Derivation):
 Để bảo đảm hộp bao luôn bám dính chính xác tuyệt đối vào đối tượng trên màn hình ở mọi góc xoay mà không làm chữ bên trong nhãn bị lộn ngược, toàn bộ phép tính chuyển đổi tọa độ được xây dựng trực tiếp từ ma trận biến đổi affine 2D trong không gian màn hình:
@@ -963,14 +972,21 @@ Dự án WatchCam đã trải qua một quá trình nghiên cứu, thiết kế,
     `widthPx = scale * (dvMax - dvMin) = scale * bh * renderH`
     `heightPx = scale * (duMax - duMin) = scale * bw * renderW`
 
+- **Bù Trừ Tỉ Lệ Khung Hình Thực Tế Cho Nhận Diện Người (Physical Aspect Ratio Correction):**
+  - Công thức tính toán tỉ lệ khung hình thực tế trong không gian ảnh đã xoay:
+    `aspect_ratio = (bbox_h * oriented_h) / (bbox_w * oriented_w)`
+  - Ở góc `0°` và `180°` (ảnh `640x480`): Tỉ lệ co giãn đồng nhất với bộ đệm `160x120`.
+  - Ở góc `90°` và `270°` (ảnh `480x640`): Công thức tự động nhân hệ số bù trừ `(640 / 120) / (480 / 160) = 1.7778`, khôi phục chính xác tỉ lệ vóc dáng con người trong không gian dọc.
+
 - **Cơ Chế Tái Định Vị Tức Thì Khi Người Dùng Bấm Nút Xoay:**
   - Lưu trữ trạng thái nhận diện đang hoạt động `activeDetectionData = { boundingBox, entityType, confidence }`.
   - Trong hàm `applyRotation(deg)`, ngay khi thuộc tính transform của video được cập nhật, hàm chủ động gọi lại `renderDetectionBox` với dữ liệu hộp bao hiện thời. Hộp bao lập tức nhảy sang vị trí hiển thị mới mà không cần chờ đến frame nhận diện kế tiếp.
   - Tích hợp cờ phát hiện thay đổi góc quay (`lastRenderedRotation !== deg`): Tự động vô hiệu hóa transition trong 1 frame để áp dụng vị trí mới ngay tức thì, loại bỏ hoàn toàn hiện tượng hộp bao bay vệt dài chéo màn hình khi đổi góc quay.
+  - Tự động kích hoạt lại `applyRotation` khi thay đổi chế độ toàn màn hình hoặc khi kích thước thực tế của ảnh `streamView` được nạp hoàn tất.
 
 #### 3. Đồng Bộ Hóa Chiều Xoay Cảm Biến Camera Vật Lý (Camera Sensor & Orientation Pipeline):
-- **Bổ sung `OrientationEventListener` Trong `CameraManager.kt`:**
-  - Khởi tạo bộ lắng nghe cảm biến gia tốc / hướng xoay vật lý của thiết bị Android trong `startCamera()`.
+- **Bổ sung Bộ Lắng Nghe Và Khởi Tạo Hướng Ban Đầu Trong `CameraManager.kt`:**
+  - Tự động truy vấn hướng hiển thị ban đầu của màn hình (`Display.rotation` / `WindowManager.defaultDisplay.rotation`) để khởi tạo `currentTargetRotation` chính xác ngay từ thời điểm dịch vụ khởi động, khắc phục lỗi thiết bị đặt cố định không kích hoạt sự kiện cảm biến.
   - Khi thiết bị xoay (ví dụ cầm ngược máy tính bảng `180°`), hàm `onOrientationChanged` tự động ánh xạ góc nghiêng sang các hằng số `Surface.ROTATION_0`, `ROTATION_90`, `ROTATION_180`, `ROTATION_270`.
   - Cập nhật trực tiếp `imageAnalysis?.targetRotation = targetRotation` và `preview?.targetRotation = targetRotation`. CameraX tự động tính toán lại góc quay bù trừ và truyền `imageInfo.rotationDegrees` chính xác tới lõi native Rust.
   - Hủy bộ lắng nghe trong `stopCamera()` và `release()` để giải phóng triệt để tài nguyên, tránh rò rỉ bộ nhớ.
@@ -982,20 +998,20 @@ Dự án WatchCam đã trải qua một quá trình nghiên cứu, thiết kế,
     - `90°`: $orig_x = out_y$, $orig_y = height - 1 - out_x$
     - `180°`: $orig_x = width - 1 - out_x$, $orig_y = height - 1 - out_y$
     - `270°`: $orig_x = width - 1 - out_y$, $orig_y = out_x$
-  - Nhờ đó, khung hình luồng MJPEG và ma trận phân tích chuyển động trong lõi Rust có cùng một hệ quy chiếu không gian chuẩn hóa. Bounding Box chuẩn hóa `[bx, by, bw, bh]` phát sinh từ thuật toán phân cụm luôn đồng bộ hoàn toàn với khung hình video mà người dùng theo dõi.
-  - Camera trước và camera sau đều giữ nguyên quy ước đối xứng chuẩn, không bị đảo ngược trục ngang độc lập.
+  - Thêm cơ chế theo dõi `last_rotation`: Khi `rotation_degrees` thay đổi (do xoay thiết bị) hoặc khi `set_camera_id` được gọi (do chuyển đổi camera trước/sau), hàm `reset()` được kích hoạt ngay lập tức, xóa sạch bộ đệm tham chiếu cũ và xóa hộp bao làm mượt cũ, loại bỏ cảnh báo giả và vệt mờ tọa độ.
 
 #### 4. Kết Quả Kiểm Thử Toàn Diện & Triển Khai Thực Tế:
 - **Kiểm Thử Đơn Vị Tự Động Lõi Rust Core (`cargo test`):**
-  - Đạt **74/74 bài kiểm thử thành công** (`test result: ok. 74 passed; 0 failed`).
-  - Nâng cấp bài kiểm thử `test_downsample_and_rotate_y`: Tạo ma trận ảnh 320x240 với 4 góc phần tư mang giá trị điểm ảnh phân biệt rõ ràng (10, 20, 30, 40) và kiểm tra chính xác từng tọa độ pixel đầu ra sau khi xoay ở cả 4 góc `0°`, `90°`, `180°`, `270°`, cùng với kiểm thử bước đệm bộ nhớ đệm hàng (padded row stride).
+  - Đạt **76/76 bài kiểm thử thành công** (`test result: ok. 76 passed; 0 failed`).
+  - Thêm bài kiểm thử `test_portrait_mode_aspect_ratio_person_detection`: Xác nhận bóng dáng người đứng thẳng trong ảnh hướng dọc `480x640` được phân loại chính xác thành `person` với độ tin cậy trên 70%.
+  - Thêm bài kiểm thử `test_motion_detector_rotation_change_resets_reference_frame`: Xác nhận thay đổi góc quay từ `0°` sang `180°` tự động đặt lại bộ đệm tham chiếu mà không gây kích hoạt cảnh báo sai lệch toàn khung hình.
 - **Kiểm Thử Đơn Vị Android Kotlin (`.\gradlew testDebugUnitTest`):**
   - Đạt **32/32 bài kiểm thử thành công**, xác nhận toàn bộ bộ phân tích `EntityDetectionParserTest`, kiểm thử telemetry và cấu hình đều hoạt động chính xác.
 - **Biên Dịch Thư Viện Native Release (`.so`):**
   - Biên dịch thành công thư viện nhúng mã nguồn Web mới vào `.so` cho cả 3 kiến trúc mục tiêu:
-    - `aarch64-linux-android` (`7.68 MB`) -> `app/src/main/jniLibs/arm64-v8a/libwatchcam_core.so`
-    - `armv7-linux-androideabi` (`5.82 MB`) -> `app/src/main/jniLibs/armeabi-v7a/libwatchcam_core.so`
-    - `x86_64-linux-android` (`7.62 MB`) -> `app/src/main/jniLibs/x86_64/libwatchcam_core.so`
+    - `aarch64-linux-android` -> `app/src/main/jniLibs/arm64-v8a/libwatchcam_core.so`
+    - `armv7-linux-androideabi` -> `app/src/main/jniLibs/armeabi-v7a/libwatchcam_core.so`
+    - `x86_64-linux-android` -> `app/src/main/jniLibs/x86_64/libwatchcam_core.so`
 - **Đóng Gói Gói Cài Đặt Android (`.\gradlew assembleDebug`):**
   - Hoàn tất thành công, tạo gói APK hoàn chỉnh với mã Web UI và thư viện native mới nhất.
 - **Triển Khai & Kiểm Thử Trực Tiếp Trên Thiết Bị IvyPad Smart 5 (`AYZ2026040096`):**
